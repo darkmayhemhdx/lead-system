@@ -1,0 +1,19 @@
+# Lead System – hält das kostenlose Supabase-Projekt wach (täglicher Ping)
+# Auf GitHub: Add file → Create new file → Name: .github/workflows/supabase-wach-halten.yml
+name: Supabase wach halten
+on:
+  schedule:
+    - cron: '17 5 * * *'     # täglich 07:17 Uhr (Sommerzeit)
+  workflow_dispatch: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Supabase anpingen
+        run: |
+          URL=$(jq -r .url sync-config.json); KEY=$(jq -r .key sync-config.json)
+          A=$(curl -s -o /dev/null -w '%{http_code}' "$URL/auth/v1/health" -H "apikey: $KEY")
+          B=$(curl -s -o /dev/null -w '%{http_code}' "$URL/rest/v1/ls_items?select=id&limit=1" -H "apikey: $KEY")
+          echo "Auth: $A · Datenbank: $B"
+          test "$A" -lt 500
