@@ -1,0 +1,14 @@
+{
+ "version": "1.8.1",
+ "notes": "Neu: Im Monitor lassen sich alle Inhalte löschen (Cloud + alle Geräte), mit Sicherung vorher.",
+ "win": {
+  "url": "https://github.com/darkmayhemhdx/lead-system/releases/download/v1.8.1/LeadSystem-1.8.1-win.exe",
+  "sha256": "75b7f708ca71ba0f2d100e473ae0fb84c437616f197aeea150f662ca0b0ea4b9",
+  "size": 88672057
+ },
+ "mac": {
+  "url": "https://github.com/darkmayhemhdx/lead-system/releases/download/v1.8.1/LeadSystem-1.8.1-mac.zip",
+  "sha256": "7a3211d0cb6b3f16a46d765edf65f0c8b804e49678c0ee93cc80d7d3690e3059",
+  "size": 214039367
+ }
+}

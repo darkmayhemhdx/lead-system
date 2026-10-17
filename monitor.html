@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lead System Monitor</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="LS Monitor">
+<link rel="manifest" href="monitor.webmanifest">
+<link rel="apple-touch-icon" href="monitor-icon.png">
+<link rel="icon" type="image/png" href="monitor-icon.png">
+<style>
+/* Layout: macOS-Dashboard – Statusband oben, Prüfungen, Gerätekarten im Raster, Verlauf unten */
+:root{
+  --bg:#F2F1F3; --panel:#FFFFFF; --panel2:#F8F7F9; --fg:#1F1A1E; --muted:#77707A; --line:rgba(40,20,35,.10);
+  --brand:#503645; --brand-ink:#fff; --accent:#F5B400;
+  --ok:#23864F; --ok-bg:#E6F4EC; --warn:#A86A00; --warn-bg:#FFF3D6; --bad:#C0392B; --bad-bg:#FCE8E6; --idle:#8A8490; --idle-bg:#EFEDF1;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace; color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141114; --panel:#1E1A1E; --panel2:#262126; --fg:#F2EDF1; --muted:#A49CA6; --line:rgba(255,240,250,.09);
+  --brand:#D8B6C8; --brand-ink:#1E1219; --ok:#5CC98C; --ok-bg:rgba(92,201,140,.13); --warn:#F0B44A; --warn-bg:rgba(240,180,74,.13); --bad:#F2786B; --bad-bg:rgba(242,120,107,.13); --idle:#9C95A0; --idle-bg:rgba(255,255,255,.06); color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141114; --panel:#1E1A1E; --panel2:#262126; --fg:#F2EDF1; --muted:#A49CA6; --line:rgba(255,240,250,.09);
+  --brand:#D8B6C8; --brand-ink:#1E1219; --ok:#5CC98C; --ok-bg:rgba(92,201,140,.13); --warn:#F0B44A; --warn-bg:rgba(240,180,74,.13); --bad:#F2786B; --bad-bg:rgba(242,120,107,.13); --idle:#9C95A0; --idle-bg:rgba(255,255,255,.06); color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 var(--font);-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding-block:22px 40px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px))}
+header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.logo{width:40px;height:40px;border-radius:10px;background:#fff;display:grid;place-items:center;box-shadow:0 1px 3px rgba(0,0,0,.15);flex:none}
+.logo img{width:34px;height:34px}
+h1{font-size:20px;margin:0;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:12.5px}
+.sp{flex:1}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;font-weight:600;font-size:13px}
+.btn:hover{background:var(--panel2)}
+.btn.primary{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.btn:disabled{opacity:.5}
+/* Statusband */
+.band{border-radius:14px;padding:18px 22px;display:flex;align-items:center;gap:18px;margin-bottom:16px;border:1px solid var(--line)}
+.band .big{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;flex:none}
+.band .big svg{width:26px;height:26px}
+.band h2{margin:0;font-size:19px;letter-spacing:-.01em}
+.band p{margin:2px 0 0;color:var(--muted)}
+.band.ok{background:var(--ok-bg)}.band.ok .big{background:var(--ok);color:#fff}
+.band.warn{background:var(--warn-bg)}.band.warn .big{background:var(--warn);color:#fff}
+.band.bad{background:var(--bad-bg)}.band.bad .big{background:var(--bad);color:#fff}
+.band.idle{background:var(--idle-bg)}.band.idle .big{background:var(--idle);color:#fff}
+.band .nums{margin-left:auto;display:flex;gap:22px;text-align:right}
+.band .nums b{display:block;font-size:22px;font-variant-numeric:tabular-nums;line-height:1.1}
+.band .nums span{font-size:11.5px;color:var(--muted)}
+/* Prüfungen */
+.checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-bottom:22px}
+.chk{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start}
+.chk i{width:10px;height:10px;border-radius:50%;margin-top:5px;flex:none;background:var(--idle)}
+.chk.ok i{background:var(--ok)}.chk.bad i{background:var(--bad)}.chk.warn i{background:var(--warn)}
+.chk b{display:block;font-size:13px}.chk span{font-size:12px;color:var(--muted)}
+h3{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 10px;font-weight:700;display:flex;justify-content:space-between}
+/* Geräte */
+.devs{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;margin-bottom:26px}
+.dev{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.dev-h{display:flex;gap:12px;align-items:center}
+.dev-ic{width:42px;height:42px;border-radius:10px;background:var(--panel2);display:grid;place-items:center;flex:none;color:var(--brand);position:relative}
+.dev-ic svg{width:24px;height:24px}
+.dev-ic .on{position:absolute;right:-3px;bottom:-3px;width:12px;height:12px;border-radius:50%;border:2px solid var(--panel);background:var(--idle)}
+.dev-ic .on.live{background:var(--ok)}
+.dev-n{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dev-m{font-size:12px;color:var(--muted)}
+.pill{display:inline-flex;gap:6px;align-items:center;font-size:12px;font-weight:700;padding:4px 10px;border-radius:99px;white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.bad{background:var(--bad-bg);color:var(--bad)}.pill.idle{background:var(--idle-bg);color:var(--idle)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:12.5px}
+.kv dt{color:var(--muted)}.kv dd{margin:0;font-variant-numeric:tabular-nums;min-width:0;overflow-wrap:anywhere}
+.dev-f{display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:10px}
+.linkbtn{border:0;background:none;color:var(--brand);font-weight:600;font-size:12.5px;padding:0}
+.linkbtn.del{color:var(--bad)}
+.hint{font-size:12px;color:var(--muted)}
+/* Verlauf */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:600;padding:9px 14px;background:var(--panel2);border-bottom:1px solid var(--line)}
+td{padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.t{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+.tag{font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--panel2);color:var(--muted)}
+.tag.lead{background:var(--ok-bg);color:var(--ok)}.tag.task{background:var(--warn-bg);color:var(--warn)}.tag.del{background:var(--bad-bg);color:var(--bad)}
+.tablewrap{overflow-x:auto}
+/* Gefahrenzone */
+.danger{background:var(--panel);border:1px solid var(--bad);border-radius:14px;padding:16px 18px;margin-top:26px}
+.danger h4{margin:0 0 4px;font-size:15px;color:var(--bad)}
+.danger p{margin:0 0 10px;color:var(--muted);font-size:13px}
+.danger ul{margin:0 0 12px;padding-left:18px;font-size:13px}
+.danger label.opt{display:flex;gap:9px;align-items:flex-start;font-size:13px;margin:8px 0}
+.danger label.opt input{margin-top:3px}
+.danger label.opt span{color:var(--muted);font-size:12px;display:block}
+.danger .confirm{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.danger .confirm input{padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);width:170px;font-weight:700;letter-spacing:.04em}
+.btn.bad{background:var(--bad);border-color:var(--bad);color:#fff}
+.wipe-dev{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+/* Anmeldung */
+.login{max-width:380px;margin:12vh auto 0;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:26px}
+.login h1{margin:14px 0 4px}
+.login label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:14px 0 4px}
+.login input{width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel2)}
+.err{color:var(--bad);font-size:12.5px;min-height:18px;margin-top:10px}
+.spin{display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:sp 1s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+@media (max-width:640px){.band{flex-wrap:wrap}.band .nums{margin-left:0}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script src="ls-sync.js"></script>
+<script>
+'use strict';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const IC={
+  ok:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+  warn:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 7v6M12 17.2v.1"/></svg>',
+  bad:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>',
+  idle:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 9v3l2 2"/></svg>',
+  mac:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M1.5 19.5h21"/></svg>',
+  win:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 5.5 10.5 4.5v7H3zM12.5 4.2 21 3v8.5h-8.5zM3 13h7.5v6.5L3 18.5zM12.5 13H21v8l-8.5-1.2z"/></svg>',
+  ios:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>',
+  web:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg>',
+};
+const LBL=()=>{ try{ return JSON.parse(localStorage.getItem('mon:labels')||'{}'); }catch(e){ return {}; } };
+let wipe=null, wipeBusy=false, reloadAfter=false, backups=null, restoreAsk=null, editing=null, data=null, checks={}, lastLoad=null, loading=false, timer=null;
+
+function ago(iso){ if(!iso) return '–'; const s=Math.round((Date.now()-new Date(iso))/1000); if(s<10) return 'gerade eben'; if(s<60) return `vor ${s} s`; const m=Math.round(s/60); if(m<60) return `vor ${m} min`; const h=Math.round(m/60); if(h<36) return `vor ${h} h`; return `vor ${Math.round(h/24)} Tagen`; }
+function dt(iso){ return iso?new Date(iso).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'–'; }
+
+async function timed(fn){ const t=performance.now(); try{ const r=await fn(); return {ok:true,ms:Math.round(performance.now()-t),r}; }catch(e){ return {ok:false,ms:Math.round(performance.now()-t),e}; } }
+
+async function load(){
+  if(loading){ reloadAfter=true; return; } loading=true; reloadAfter=false; renderTop();
+  try{
+    const cfg=await timed(()=>LeadSync.loadConfig(true));
+    checks.cfg=cfg.ok&&LeadSync.info.configured?{s:'ok',t:'Verbindungsdatei',d:'sync-config.json gefunden'}:{s:'bad',t:'Verbindungsdatei',d:'sync-config.json fehlt oder ist leer'};
+    const app=await timed(async()=>{ const r=await fetch('index.html?t='+Date.now(),{cache:'no-store'}); if(!r.ok) throw new Error(r.status); });
+    checks.app=app.ok?{s:'ok',t:'iPhone-App online',d:'darkmayhemhdx.github.io/lead-system'}:{s:'warn',t:'iPhone-App',d:'Seite nicht erreichbar'};
+    const rows=await timed(async()=>{ const out=[]; let after=null; for(let i=0;i<40;i++){ const q='ls_items?select=kind,id,data,updated_at,deleted,srv,device&order=srv.asc&limit=1000'+(after?'&srv=gt.'+encodeURIComponent(after):''); const r=await LeadSync.api(q)||[]; out.push(...r); if(r.length<1000) break; after=r[r.length-1].srv; } return out; });
+    if(!rows.ok){
+      const m=String(rows.e&&rows.e.message||'');
+      checks.cloud={s:'bad',t:'Supabase',d:/device/.test(m)?'Spalte „device“ fehlt – SQL-Datei erneut ausführen':/42P01|404/.test(m)?'Tabelle fehlt – SQL-Datei ausführen':/anmelden|nicht angemeldet/i.test(m)?'Bitte neu anmelden':'Nicht erreichbar: '+m.slice(0,80)};
+      checks.auth={s:LeadSync.info.loggedIn?'ok':'bad',t:'Anmeldung',d:LeadSync.info.email||'abgemeldet'};
+      data=null;
+    } else {
+      checks.cloud={s:'ok',t:'Supabase erreichbar',d:`Antwortzeit ${rows.ms} ms`};
+      checks.auth={s:'ok',t:'Anmeldung',d:LeadSync.info.email||''};
+      data=analyse(rows.r);
+      const bk=await timed(()=>LeadSync.api('ls_backups?select=day,created,leads,tasks&order=day.desc&limit=31'));
+      backups=bk.ok?(bk.r||[]):null;
+      const today=new Date().toISOString().slice(0,10), yest=new Date(Date.now()-864e5).toISOString().slice(0,10);
+      checks.backup=!bk.ok?{s:'bad',t:'Cloud-Sicherung',d:'Tabelle fehlt – SQL-Datei erneut ausführen'}
+        :!backups.length?{s:'warn',t:'Cloud-Sicherung',d:'Noch keine Sicherung – „Jetzt sichern“ klicken'}
+        :(backups[0].day>=yest)?{s:'ok',t:'Cloud-Sicherung',d:`Letzte: ${new Date(backups[0].created).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${backups.length} Tage`}
+        :{s:'warn',t:'Cloud-Sicherung',d:'Letzte vom '+new Date(backups[0].day).toLocaleDateString('de-DE')+' – Cron prüfen'};
+    }
+  } finally { loading=false; lastLoad=new Date().toISOString(); render(); if(reloadAfter){ reloadAfter=false; setTimeout(load,50); } }
+}
+
+function analyse(rows){
+  const recs=rows.filter(r=>(r.kind==='lead'||r.kind==='task')&&!r.deleted);
+  const pairs=recs.map(r=>r.kind+':'+r.id+'='+LeadSync.hash(r.data));
+  const fp=LeadSync.fingerprint(pairs);
+  const leads=recs.filter(r=>r.kind==='lead').length, tasks=recs.length-leads;
+  const changes=rows.filter(r=>r.kind==='lead'||r.kind==='task'||r.kind==='meta').sort((a,b)=>a.srv<b.srv?1:-1);
+  const lastChange=changes[0]?changes[0].srv:null;
+  const devRows=rows.filter(r=>r.kind==='device');
+  const names={}; devRows.forEach(d=>names[d.id]=(LBL()[d.id]||d.data.name||'Gerät'));
+  const now=Date.now();
+  const devs=devRows.map(r=>{
+    const d=r.data||{}, seenMs=now-new Date(d.seen||r.srv), live=seenMs<90e3;
+    let st,lab,why;
+    if(d.state==='err'&&seenMs<5*60e3){ st='bad'; lab='Fehler'; why=d.msg||'Abgleich fehlgeschlagen'; }
+    else if(d.fp===fp){ st='ok'; lab='Synchron'; why='Gleicher Stand wie die Cloud'; }
+    else if(seenMs<2*60e3){ st='warn'; lab='Gleicht ab…'; why='Neue Änderungen werden gerade übernommen'; }
+    else if(lastChange&&new Date(d.lastSync||0)<new Date(lastChange)){ st='idle'; lab='Nicht aktuell'; why='App seit '+ago(d.seen).replace('vor ','')+' geschlossen – holt beim Öffnen auf'; }
+    else { st='bad'; lab='Abweichung'; why=`Gerät: ${d.leads??'?'} Leads · Cloud: ${leads} Leads – App öffnen und „Jetzt abgleichen“`; }
+    return {id:r.id,d,st,lab,why,live,seenMs,name:names[r.id]};
+  }).sort((a,b)=>a.seenMs-b.seenMs);
+  return {fp,leads,tasks,lastChange,devs,names,changes:changes.slice(0,30),rows};
+}
+
+function overall(){
+  if(!data) return {s:'bad',t:'Keine Verbindung zur Cloud',d:(checks.cloud&&checks.cloud.d)||''};
+  const act=data.devs.filter(x=>x.seenMs<14*864e5);
+  if(!act.length) return {s:'idle',t:'Noch kein Gerät verbunden',d:'Melde dich in der Lead-System-App unter Synchronisation an.'};
+  const bad=act.filter(x=>x.st==='bad'), warn=act.filter(x=>x.st==='warn'), idle=act.filter(x=>x.st==='idle'), ok=act.filter(x=>x.st==='ok');
+  if(bad.length) return {s:'bad',t:`${bad.length} ${bad.length>1?'Geräte haben':'Gerät hat'} ein Problem`,d:bad.map(x=>x.name+': '+x.lab).join(' · ')};
+  if(warn.length) return {s:'warn',t:'Abgleich läuft',d:warn.map(x=>x.name).join(', ')+' übernehmen gerade neue Änderungen.'};
+  if(idle.length) return {s:'ok',t:'Alle aktiven Geräte synchron',d:idle.map(x=>x.name).join(', ')+' holt beim nächsten Öffnen auf.'};
+  return {s:'ok',t:`Alles synchron · ${ok.length} ${ok.length>1?'Geräte':'Gerät'}`,d:'Alle Geräte haben denselben Stand wie die Cloud.'};
+}
+
+function devIcon(p){ return p==='macOS'?IC.mac:p==='Windows'?IC.win:p==='iOS'?IC.ios:IC.web; }
+function render(){
+  const app=$('#app');
+  if(!LeadSync.info.loggedIn){ app.innerHTML=loginHtml(); return; }
+  const o=overall();
+  app.innerHTML=`
+  <header><div class="logo"><img src="monitor-icon.png" alt=""></div><div><h1>Lead System Monitor</h1><div class="sub">${esc(LeadSync.info.email||'')} · Stand ${lastLoad?dt(lastLoad):'–'} <span id="ld">${loading?'<span class="spin"></span>':''}</span></div></div>
+    <div class="sp"></div><button class="btn primary" onclick="load()" ${loading?'disabled':''}>Jetzt prüfen</button><button class="btn" onclick="LeadSync.logout();render()">Abmelden</button></header>
+  <div class="band ${o.s}"><div class="big">${IC[o.s]}</div><div style="min-width:0"><h2>${esc(o.t)}</h2><p>${esc(o.d)}</p></div>
+    ${data?`<div class="nums"><div><b>${data.leads}</b><span>Leads</span></div><div><b>${data.tasks}</b><span>Aufgaben</span></div><div><b>${data.devs.filter(x=>x.live).length}</b><span>online</span></div></div>`:''}</div>
+  <div class="checks">${['cloud','auth','cfg','app','backup'].map(k=>checks[k]).filter(Boolean).map(c=>`<div class="chk ${c.s}"><i></i><div><b>${esc(c.t)}</b><span>${esc(c.d)}</span></div></div>`).join('')}
+    ${data?`<div class="chk ok"><i></i><div><b>Letzte Änderung</b><span>${data.lastChange?ago(data.lastChange)+' · '+dt(data.lastChange):'noch keine'}</span></div></div>`:''}</div>
+  ${data?devicesHtml()+backupsHtml()+activityHtml()+dangerHtml():''}`;
+  if(editing){ const i=$('#lbl-'+editing); if(i){ i.focus(); } }
+}
+function renderTop(){ const l=$('#ld'); if(l) l.innerHTML=loading?'<span class="spin"></span>':''; }
+function devicesHtml(){
+  const L=LBL();
+  return `<h3><span>Geräte</span><span>${data.devs.length}</span></h3><div class="devs">${data.devs.map(x=>{ const d=x.d;
+    return `<div class="dev"><div class="dev-h"><div class="dev-ic">${devIcon(d.platform)}<span class="on${x.live?' live':''}" title="${x.live?'online':'offline'}"></span></div>
+      <div style="min-width:0;flex:1">${editing===x.id?`<input id="lbl-${x.id}" value="${esc(L[x.id]||d.name||'')}" style="width:100%;padding:3px 6px;border-radius:6px;border:1px solid var(--line);background:var(--panel2)" onkeydown="if(event.key==='Enter')saveLabel('${x.id}',this.value);if(event.key==='Escape'){editing=null;render()}" onblur="saveLabel('${x.id}',this.value)">`:`<div class="dev-n" title="${esc(d.name)}">${esc(x.name)}</div>`}
+      <div class="dev-m">${esc(d.platform||'')}${d.version?' · Version '+esc(d.version):''}${d.user?' · '+esc(d.user):''}</div></div>
+      <span class="pill ${x.st}">${esc(x.lab)}</span></div>
+      <dl class="kv"><dt>Zuletzt gesehen</dt><dd>${ago(d.seen)}</dd><dt>Letzter Abgleich</dt><dd>${dt(d.lastSync)}</dd>
+        <dt>Daten auf dem Gerät</dt><dd>${d.leads??'–'} Leads · ${d.tasks??'–'} Aufgaben</dd>
+        ${d.stats?`<dt>Letzte Runde</dt><dd>${d.stats.got} empfangen · ${d.stats.sent} gesendet</dd>`:''}
+        <dt>Hinweis</dt><dd>${esc(x.why)}</dd></dl>
+      <div class="dev-f"><button class="linkbtn" onclick="editing='${x.id}';render()">Umbenennen</button>${x.seenMs>7*864e5?`<button class="linkbtn del" onclick="removeDev('${x.id}')">Gerät entfernen</button>`:`<span class="hint">${esc(x.id)}</span>`}</div></div>`; }).join('')||'<p class="hint">Noch keine Geräte. Sobald sich eine App unter „Synchronisation“ anmeldet, erscheint sie hier.</p>'}</div>`;
+}
+function saveLabel(id,v){ const L=LBL(); v=String(v||'').trim(); if(v) L[id]=v; else delete L[id]; try{ localStorage.setItem('mon:labels',JSON.stringify(L)); }catch(e){} editing=null; if(data) data=analyse(data.rows); render(); }
+async function removeDev(id){ try{ await LeadSync.api('ls_items?kind=eq.device&id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:{Prefer:'return=minimal'}}); }catch(e){} load(); }
+function backupsHtml(){
+  if(backups==null) return '';
+  return `<h3><span>Cloud-Sicherungen (30 Tage)</span><span><button class="linkbtn" onclick="backupNow()">Jetzt sichern</button></span></h3>
+  <div class="card tablewrap" style="margin-bottom:26px"><table><thead><tr><th>Tag</th><th>Erstellt</th><th>Inhalt</th><th></th></tr></thead><tbody>
+  ${backups.map(b=>`<tr><td>${new Date(b.day+'T12:00').toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'})}</td><td class="t">${dt(b.created)}</td><td>${b.leads} Leads · ${b.tasks} Aufgaben</td>
+    <td style="text-align:right">${restoreAsk===b.day?`<span class="hint">Alle Geräte auf diesen Stand setzen?</span> <button class="btn" onclick="restoreAsk=null;render()">Abbrechen</button> <button class="btn primary" style="background:var(--bad);border-color:var(--bad)" onclick="restore('${b.day}')">Wiederherstellen</button>`:`<button class="linkbtn" onclick="restoreAsk='${b.day}';render()">Wiederherstellen…</button>`}</td></tr>`).join('')||'<tr><td colspan="4" class="hint">Noch keine Sicherung. Die erste entsteht heute Nacht – oder sofort über „Jetzt sichern“.</td></tr>'}
+  </tbody></table></div>`;
+}
+async function backupNow(){ try{ await LeadSync.rpc('ls_backup_now'); }catch(e){ alertMsg('Sichern fehlgeschlagen: '+e.message); } load(); }
+async function restore(day){ restoreAsk=null; try{ const n=await LeadSync.rpc('ls_restore',{p_day:day}); alertMsg(`Stand vom ${new Date(day+'T12:00').toLocaleDateString('de-DE')} wiederhergestellt (${n} Datensätze). Alle Geräte übernehmen ihn beim nächsten Abgleich.`); }catch(e){ alertMsg('Wiederherstellen fehlgeschlagen: '+e.message); } load(); }
+function alertMsg(t){ let b=$('#msg'); if(!b){ b=document.createElement('div'); b.id='msg'; b.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:600;z-index:9;max-width:90%;box-shadow:0 8px 30px rgba(0,0,0,.25)'; document.body.appendChild(b); } b.textContent=t; clearTimeout(b._t); b._t=setTimeout(()=>b.remove(),6000); }
+function activityHtml(){
+  const leadName=new Map(data.rows.filter(r=>r.kind==='lead'&&!r.deleted).map(r=>[r.id,`${r.data.vorname||''} ${r.data.nachname||''}`.trim()]));
+  const title=r=>r.kind==='meta'?'Einstellungen, Ziele & Vorlagen':r.kind==='lead'?(r.deleted?'Lead '+r.id:`${r.data.vorname||''} ${r.data.nachname||''}`.trim()||'Lead'):(r.deleted?'Aufgabe '+r.id:(r.data.title||'Aufgabe')+(r.data.leadId&&leadName.get(String(r.data.leadId))?' · '+leadName.get(String(r.data.leadId)):''));
+  return `<h3><span>Letzte Änderungen</span><span>${data.changes.length}</span></h3><div class="card tablewrap"><table><thead><tr><th>Zeit</th><th>Art</th><th>Datensatz</th><th>Von Gerät</th></tr></thead><tbody>
+    ${data.changes.map(r=>`<tr><td class="t">${dt(r.srv)}</td><td><span class="tag ${r.deleted?'del':r.kind}">${r.deleted?'gelöscht':r.kind==='lead'?'Lead':r.kind==='task'?'Aufgabe':'Einstellung'}</span></td><td>${esc(title(r))}</td><td class="t">${esc(r.device==='wiederherstellung'?'Wiederherstellung':r.device?(data.names[r.device]||'unbekanntes Gerät'):'–')}</td></tr>`).join('')||'<tr><td colspan="4" class="hint">Noch keine Daten in der Cloud.</td></tr>'}
+  </tbody></table></div>`;
+}
+// ── Gefahrenzone: alle Inhalte löschen (Cloud + alle Geräte) ──
+function lastWipe(){ const r=data&&data.rows.find(x=>x.kind==='wipe'&&!x.deleted); return r&&r.data&&r.data.at?r.data:null; }
+function dangerHtml(){
+  const lw=lastWipe();
+  const done=lw?data.devs.filter(x=>x.seenMs<30*864e5).map(x=>({n:x.name,ok:new Date(x.d.lastSync||0).getTime()>lw.at})):[];
+  const info=lw?`<p style="margin-top:10px">Zuletzt gelöscht am <b>${dt(new Date(lw.at).toISOString())}</b> (${lw.leads??'?'} Leads, ${lw.tasks??'?'} Aufgaben).</p>
+    ${done.length?`<div class="wipe-dev">${done.map(d=>`<span class="pill ${d.ok?'ok':'warn'}">${esc(d.n)}: ${d.ok?'gelöscht':'ausstehend – App öffnen'}</span>`).join('')}</div>`:''}`:'';
+  if(!wipe) return `<div class="danger"><h4>Gefahrenzone</h4><p>Alle Leads und Aufgaben in der Cloud und auf allen verbundenen Geräten (Mac, Windows, iPhone) löschen.</p>
+    <button class="btn bad" onclick="wipe={cloudBk:false,files:false,localBk:false};render()">Alle Inhalte löschen…</button>${info}</div>`;
+  return `<div class="danger" id="wipe-box"><h4>Wirklich alle Inhalte löschen?</h4>
+    <p>Das passiert:</p>
+    <ul><li><b>${data.leads} Leads</b> und <b>${data.tasks} Aufgaben</b> werden in Supabase gelöscht.</li>
+      <li>Jedes verbundene Gerät löscht seine Leads und Aufgaben beim nächsten Abgleich ebenfalls – auch Geräte, die gerade aus sind, sobald sie wieder öffnen.</li>
+      <li>Benutzer, PIN, Ziele, Vorlagen und die Geräteliste bleiben erhalten.</li></ul>
+    <label class="opt"><input type="checkbox" id="w-cloudbk" ${wipe.cloudBk?'checked':''} onchange="wipe.cloudBk=this.checked;wipeCheck()"><div>Auch alle Cloud-Sicherungen löschen<span>Sonst wird vorher eine Sicherung angelegt – der Stand lässt sich 30 Tage lang über „Wiederherstellen…“ zurückholen.</span></div></label>
+    <label class="opt"><input type="checkbox" id="w-files" ${wipe.files?'checked':''} onchange="wipe.files=this.checked"><div>Auch Dateien und Bilder der Kundenakten auf den Computern löschen<span>Ordner „Dokumente/Lead System Kundenakten“ auf Mac und Windows.</span></div></label>
+    <label class="opt"><input type="checkbox" id="w-localbk" ${wipe.localBk?'checked':''} onchange="wipe.localBk=this.checked;wipeCheck()"><div>Auch die lokalen Sicherungen auf den Computern löschen<span>Ordner „Lead System Sicherungen“. Sonst legt jeder Computer vor dem Löschen noch eine Sicherung an.</span></div></label>
+    <p id="w-warn" style="color:var(--bad);font-weight:600;${wipe.cloudBk&&wipe.localBk?'':'display:none'}">Ohne Sicherungen kann nichts mehr wiederhergestellt werden.</p>
+    <div class="confirm"><span class="hint">Zum Bestätigen <b>LÖSCHEN</b> eintippen:</span><input id="w-txt" autocomplete="off" autocapitalize="characters" spellcheck="false" oninput="wipeCheck()" onkeydown="if(event.key==='Enter')doWipe()">
+      <button class="btn" onclick="wipe=null;render()">Abbrechen</button><button class="btn bad" id="w-go" disabled onclick="doWipe()">${wipeBusy?'<span class="spin"></span> Lösche…':'Endgültig löschen'}</button></div></div>`;
+}
+function wipeOk(){ const t=$('#w-txt'); return !!t&&t.value.trim().toUpperCase()==='LÖSCHEN'; }
+function wipeCheck(){ const b=$('#w-go'); if(b) b.disabled=!wipeOk()||wipeBusy; const w=$('#w-warn'); if(w) w.style.display=wipe&&wipe.cloudBk&&wipe.localBk?'':'none'; }
+async function doWipe(){
+  if(!wipe||wipeBusy||!wipeOk()) return; wipeBusy=true; wipeCheck();
+  try{
+    const r=await LeadSync.rpc('ls_wipe',{p_confirm:'LÖSCHEN',p_delete_backups:!!wipe.cloudBk,p_files:!!wipe.files,p_local_backups:!!wipe.localBk});
+    wipe=null; alertMsg(`Gelöscht: ${r&&r.leads||0} Leads und ${r&&r.tasks||0} Aufgaben. Die Geräte übernehmen das beim nächsten Abgleich.`);
+  }catch(e){ alertMsg(/ls_wipe|PGRST202|404/.test(e.message)?'Funktion fehlt – bitte die SQL-Datei in Supabase erneut ausführen.':'Löschen fehlgeschlagen: '+e.message); }
+  wipeBusy=false; load();
+}
+function loginHtml(){
+  return `<div class="login"><div class="logo"><img src="monitor-icon.png" alt=""></div><h1>Lead System Monitor</h1><div class="sub">Zeigt alle verbundenen Geräte und ob sie synchron sind.</div>
+    <label for="m">E-Mail (Sync-Zugang)</label><input id="m" type="email" autocomplete="username">
+    <label for="p">Passwort</label><input id="p" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="btn primary" style="width:100%;margin-top:16px;padding:9px" onclick="doLogin()">Anmelden</button><div class="err" id="err"></div></div>`;
+}
+async function doLogin(){ const m=$('#m').value.trim(), p=$('#p').value; if(!m||!p){ $('#err').textContent='Bitte E-Mail und Passwort eintragen.'; return; }
+  $('#err').textContent='Melde an…';
+  try{ await LeadSync.login(m,p); render(); load(); }catch(e){ $('#err').textContent=/Invalid login/i.test(e.message)?'E-Mail oder Passwort falsch.':e.message; } }
+
+render();
+if(LeadSync.info.loggedIn) load();
+timer=setInterval(()=>{ if(LeadSync.info.loggedIn&&!editing&&!restoreAsk&&!wipe&&document.visibilityState!=='hidden') load(); },10000);
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&LeadSync.info.loggedIn) load(); });
+</script>
+</body>
+</html>

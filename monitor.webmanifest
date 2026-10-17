@@ -1,0 +1,16 @@
+{
+ "name": "Lead System Monitor",
+ "short_name": "LS Monitor",
+ "start_url": "./monitor.html",
+ "scope": "./",
+ "display": "standalone",
+ "background_color": "#F2F1F3",
+ "theme_color": "#503645",
+ "icons": [
+  {
+   "src": "monitor-icon.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  }
+ ]
+}
