@@ -83,6 +83,13 @@
     return r.status === 204 ? null : r.json().catch(() => null);
   }
 
+  // Roh-Anfrage mit Anmeldung (z. B. Supabase Storage für App-Pakete)
+  async function authFetch(path, opt) {
+    opt = opt || {};
+    const t = await token();
+    return fetch(S.cfg.url + '/' + path.replace(/^\//, ''), { ...opt, headers: { apikey: S.cfg.key, Authorization: 'Bearer ' + t, ...(opt.headers || {}) } });
+  }
+
   function localItems() {
     const st = S.host.getState(); const m = new Map();
     (st.leads || []).forEach(l => m.set('lead:' + l.id, { kind: 'lead', id: String(l.id), rec: l }));
@@ -126,6 +133,9 @@
       Object.keys(seen).forEach(key => delete seen[key]);
       LS('known', S.known); LS('wipeAt', at);
     }
+    // Update-Steuerung aus dem Monitor
+    const ro = changes.filter(r => r.kind === 'rollout' && r.id === 'current' && !r.deleted && r.data).pop();
+    if (ro) { LS('rollout', ro.data); if (S.host.rollout) { try { S.host.rollout(ro.data); } catch (e) {} } }
     const local = localItems(); const apply = [];
     changes.forEach(row => {
       if (row.kind !== 'lead' && row.kind !== 'task' && row.kind !== 'meta') return;   // Geräte-Meldungen u. Ä.
@@ -201,7 +211,7 @@
     let info = {}; try { info = (S.host.deviceInfo && await S.host.deviceInfo()) || {}; } catch (e) {}
     const f = localFingerprint();
     const data = { name: info.name || 'Gerät', platform: info.platform || '', version: info.version || '', user: info.user || '',
-      lastSync: S.lastSync, state: S.state, msg: S.msg, fp: f.fp, leads: f.leads, tasks: f.tasks, stats: S.stats || null, seen: new Date().toISOString() };
+      lastSync: S.lastSync, state: S.state, msg: S.msg, ...(info.extra || {}), fp: f.fp, leads: f.leads, tasks: f.tasks, stats: S.stats || null, seen: new Date().toISOString() };
     await api('ls_items?on_conflict=user_id,kind,id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ kind: 'device', id: DEV, data, updated_at: Date.now(), deleted: false, device: DEV }]) });
   }
   function soon(ms) { clearTimeout(S.timer); S.timer = setTimeout(sync, ms == null ? 2500 : ms); }
@@ -210,6 +220,7 @@
     S.host = host;
     loadConfig().catch(() => {});
     if (loggedIn()) setTimeout(sync, 1200);
+    if (host.rollout && LS('rollout')) setTimeout(() => { try { host.rollout(LS('rollout')); } catch (e) {} }, 2500);
     setInterval(() => { if (loggedIn() && (typeof document === 'undefined' || document.visibilityState !== 'hidden')) sync(); }, 30000);
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', () => soon(300));
@@ -226,7 +237,7 @@
   }
 
   root.LeadSync = {
-    start, sync, soon, stamp, login, logout, mergeLead, setManualConfig, loadConfig, api, rpc, hash, fingerprint, deviceId: DEV,
-    get info() { return { configured: configured(), loggedIn: loggedIn(), email: S.sess && S.sess.email, last: S.lastSync, state: S.state, msg: S.msg, manual: !!LS('cfgManual'), cfg: S.cfg }; },
+    start, sync, soon, stamp, authFetch, heartbeat: () => heartbeat().catch(() => {}), login, logout, mergeLead, setManualConfig, loadConfig, api, rpc, hash, fingerprint, deviceId: DEV,
+    get info() { return { configured: configured(), loggedIn: loggedIn(), email: S.sess && S.sess.email, uid: S.sess && S.sess.uid, last: S.lastSync, state: S.state, msg: S.msg, manual: !!LS('cfgManual'), cfg: S.cfg }; },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

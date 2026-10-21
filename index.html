@@ -610,7 +610,7 @@ function mehrHtml(){
   <p class="note">Vorlagen bearbeitest du in der Computer-App; nach dem nächsten Laden sind sie hier.</p>
   ${trash.length?`<div class="sec"><h2>Papierkorb</h2><span class="n">${trash.length}</span></div><div class="group">${trash.map(l=>`<div class="row"><div class="main"><div class="t">${esc(nameOf(l))}</div><div class="m">gelöscht am ${fmtDate(String(l.deletedAt).slice(0,10))}</div></div><button class="btn sm" onclick="restoreLead(${l.id})">Wiederherstellen</button></div>`).join('')}</div>`:''}
   <div class="sec"><h2>Profil</h2></div>
-  <p class="note" style="text-align:center;margin-top:18px">Lead System Mobil · Version 1.8.1</p>
+  <p class="note" style="text-align:center;margin-top:18px">Lead System Mobil · Version 1.9.0</p>
   <div class="group"><button class="row" onclick="openRename()"><div class="main"><div class="t">Name ändern</div><div class="m">Muss genau wie in der Computer-App lauten</div></div><span class="chev">${IC.chev}</span></button></div>`;
 }
 function openRename(){ const names=[...new Set(S.leads.map(l=>l.createdBy).filter(Boolean))];
@@ -910,7 +910,7 @@ async function runGeo(){ if(geoBusy) return; geoBusy=true;
   render(); initCloud();
   if(me&&pinUser()&&pinUser().pin) showLock();
   document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') hiddenAt=Date.now(); else if(me&&pinUser()&&pinUser().pin&&lockMins()>0&&hiddenAt&&Date.now()-hiddenAt>lockMins()*60000) showLock(); });
-  if(window.LeadSync) LeadSync.start({getState:()=>({leads:S.leads,tasks:S.tasks,meta:{users:S.users,goals:S.goals,prefs:S.prefs,nextId:S.nextId,taskNextId:S.taskNextId}}),applyRemote:syncApply,onStatus:syncStatus,wipe:syncWipe,deviceInfo:()=>{ const ua=navigator.userAgent; return {name:/iPad/.test(ua)?'iPad':/iPhone/.test(ua)?'iPhone':'Handy-App (Browser)',platform:/iPhone|iPad/.test(ua)?'iOS':'Web',version:'1.8.1',user:me}; }});
+  if(window.LeadSync) LeadSync.start({getState:()=>({leads:S.leads,tasks:S.tasks,meta:{users:S.users,goals:S.goals,prefs:S.prefs,nextId:S.nextId,taskNextId:S.taskNextId}}),applyRemote:syncApply,onStatus:syncStatus,wipe:syncWipe,deviceInfo:()=>{ const ua=navigator.userAgent; return {name:/iPad/.test(ua)?'iPad':/iPhone/.test(ua)?'iPhone':'Handy-App (Browser)',platform:/iPhone|iPad/.test(ua)?'iOS':'Web',version:'1.9.0',user:me}; }});
   if(!HOSTED){ try{ navigator.storage&&navigator.storage.persist&&navigator.storage.persist(); }catch(e){} if('serviceWorker' in navigator&&location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{}); }
   document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden'){ clearTimeout(flushTimer); flush(); } });
 })();

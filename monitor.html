@@ -100,6 +100,16 @@ td.t{font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
 .danger .confirm input{padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);width:170px;font-weight:700;letter-spacing:.04em}
 .btn.bad{background:var(--bad);border-color:var(--bad);color:#fff}
 .wipe-dev{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+/* Updates */
+.upd{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:26px;display:grid;gap:14px}
+.upd-now{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.upd-now .big{font-size:15px;font-weight:700}
+.upd-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.upd-box{border:1px dashed var(--line);border-radius:12px;padding:12px 14px;background:var(--panel2)}
+.upd-box h4{margin:0 0 6px;font-size:13px}
+.upd input[type=text]{padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel);width:120px}
+.upd label.r{display:inline-flex;gap:6px;align-items:center;font-size:13px;margin-right:12px}
+.upd .note{font-size:12px;color:var(--muted)}
 /* Anmeldung */
 .login{max-width:380px;margin:12vh auto 0;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:26px}
 .login h1{margin:14px 0 4px}
@@ -130,7 +140,7 @@ const IC={
   web:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg>',
 };
 const LBL=()=>{ try{ return JSON.parse(localStorage.getItem('mon:labels')||'{}'); }catch(e){ return {}; } };
-let wipe=null, wipeBusy=false, reloadAfter=false, backups=null, restoreAsk=null, editing=null, data=null, checks={}, lastLoad=null, loading=false, timer=null;
+let updUi={file:null,meta:null,full:null,ask:null,mode:'start',busy:false,msg:''}, wipe=null, wipeBusy=false, reloadAfter=false, backups=null, restoreAsk=null, editing=null, data=null, checks={}, lastLoad=null, loading=false, timer=null;
 
 function ago(iso){ if(!iso) return '–'; const s=Math.round((Date.now()-new Date(iso))/1000); if(s<10) return 'gerade eben'; if(s<60) return `vor ${s} s`; const m=Math.round(s/60); if(m<60) return `vor ${m} min`; const h=Math.round(m/60); if(h<36) return `vor ${h} h`; return `vor ${Math.round(h/24)} Tagen`; }
 function dt(iso){ return iso?new Date(iso).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'–'; }
@@ -185,7 +195,9 @@ function analyse(rows){
     else { st='bad'; lab='Abweichung'; why=`Gerät: ${d.leads??'?'} Leads · Cloud: ${leads} Leads – App öffnen und „Jetzt abgleichen“`; }
     return {id:r.id,d,st,lab,why,live,seenMs,name:names[r.id]};
   }).sort((a,b)=>a.seenMs-b.seenMs);
-  return {fp,leads,tasks,lastChange,devs,names,changes:changes.slice(0,30),rows};
+  const rollout=(rows.find(r=>r.kind==='rollout'&&r.id==='current'&&!r.deleted)||{}).data||null;
+  const releases=rows.filter(r=>r.kind==='release'&&!r.deleted&&r.data).map(r=>r.data).sort((a,b)=>(b.uploaded||0)-(a.uploaded||0));
+  return {fp,leads,tasks,lastChange,devs,names,changes:changes.slice(0,30),rows,rollout,releases};
 }
 
 function overall(){
@@ -211,7 +223,7 @@ function render(){
     ${data?`<div class="nums"><div><b>${data.leads}</b><span>Leads</span></div><div><b>${data.tasks}</b><span>Aufgaben</span></div><div><b>${data.devs.filter(x=>x.live).length}</b><span>online</span></div></div>`:''}</div>
   <div class="checks">${['cloud','auth','cfg','app','backup'].map(k=>checks[k]).filter(Boolean).map(c=>`<div class="chk ${c.s}"><i></i><div><b>${esc(c.t)}</b><span>${esc(c.d)}</span></div></div>`).join('')}
     ${data?`<div class="chk ok"><i></i><div><b>Letzte Änderung</b><span>${data.lastChange?ago(data.lastChange)+' · '+dt(data.lastChange):'noch keine'}</span></div></div>`:''}</div>
-  ${data?devicesHtml()+backupsHtml()+activityHtml()+dangerHtml():''}`;
+  ${data?devicesHtml()+updatesHtml()+backupsHtml()+activityHtml()+dangerHtml():''}`;
   if(editing){ const i=$('#lbl-'+editing); if(i){ i.focus(); } }
 }
 function renderTop(){ const l=$('#ld'); if(l) l.innerHTML=loading?'<span class="spin"></span>':''; }
@@ -220,7 +232,7 @@ function devicesHtml(){
   return `<h3><span>Geräte</span><span>${data.devs.length}</span></h3><div class="devs">${data.devs.map(x=>{ const d=x.d;
     return `<div class="dev"><div class="dev-h"><div class="dev-ic">${devIcon(d.platform)}<span class="on${x.live?' live':''}" title="${x.live?'online':'offline'}"></span></div>
       <div style="min-width:0;flex:1">${editing===x.id?`<input id="lbl-${x.id}" value="${esc(L[x.id]||d.name||'')}" style="width:100%;padding:3px 6px;border-radius:6px;border:1px solid var(--line);background:var(--panel2)" onkeydown="if(event.key==='Enter')saveLabel('${x.id}',this.value);if(event.key==='Escape'){editing=null;render()}" onblur="saveLabel('${x.id}',this.value)">`:`<div class="dev-n" title="${esc(d.name)}">${esc(x.name)}</div>`}
-      <div class="dev-m">${esc(d.platform||'')}${d.version?' · Version '+esc(d.version):''}${d.user?' · '+esc(d.user):''}</div></div>
+      <div class="dev-m">${esc(d.platform||'')}${d.bundle?' · Version '+esc(d.core||'')+' + Paket '+esc(d.bundle):d.version?' · Version '+esc(d.version):''}${d.user?' · '+esc(d.user):''}</div></div>
       <span class="pill ${x.st}">${esc(x.lab)}</span></div>
       <dl class="kv"><dt>Zuletzt gesehen</dt><dd>${ago(d.seen)}</dd><dt>Letzter Abgleich</dt><dd>${dt(d.lastSync)}</dd>
         <dt>Daten auf dem Gerät</dt><dd>${d.leads??'–'} Leads · ${d.tasks??'–'} Aufgaben</dd>
@@ -279,6 +291,102 @@ async function doWipe(){
   }catch(e){ alertMsg(/ls_wipe|PGRST202|404/.test(e.message)?'Funktion fehlt – bitte die SQL-Datei in Supabase erneut ausführen.':'Löschen fehlgeschlagen: '+e.message); }
   wipeBusy=false; load();
 }
+// ── Updates: App-Pakete und Vollversionen an alle Computer verteilen ──
+const GH_API=()=>{ try{ return localStorage.getItem('mon:ghapi')||'https://api.github.com/repos/darkmayhemhdx/lead-system/releases/tags/'; }catch(e){ return 'https://api.github.com/repos/darkmayhemhdx/lead-system/releases/tags/'; } };
+const vgt=(a,b)=>{ const pa=String(a).split('.').map(n=>+n||0), pb=String(b).split('.').map(n=>+n||0); for(let i=0;i<3;i++) if((pa[i]||0)!==(pb[i]||0)) return (pa[i]||0)>(pb[i]||0); return false; };
+function relLabel(r){ return r.type==='app'?'App-Paket '+r.version:r.type==='full'?'Vollversion '+r.version:'Eingebaute Programmversion (ohne Paket)'; }
+function devUpd(x){
+  const r=data.rollout, d=x.d, u=d.upd;
+  if(!/macOS|Windows/.test(d.platform||'')) return {s:'idle',t:'aktualisiert sich über GitHub'};
+  if(!r) return {s:'idle',t:'Version '+(d.version||'?')};
+  if(!u||!d.core) return {s:'warn',t:'kennt Monitor-Updates noch nicht – einmal per „Update“ auf 1.9 bringen'};
+  if(u.at!==r.at) return {s:x.seenMs<5*60e3?'warn':'idle',t:x.seenMs<5*60e3?'holt das Update gerade ab':'App geschlossen – holt es beim Öffnen'};
+  if(u.state==='ok') return {s:'ok',t:'aktuell'};
+  if(u.state==='fehler') return {s:'bad',t:'Fehler: '+(u.msg||'')};
+  return {s:'warn',t:u.state+(u.msg?' – '+u.msg:'')};
+}
+function updatesHtml(){
+  const r=data.rollout, comps=data.devs.filter(x=>/macOS|Windows/.test(x.d.platform||'')&&x.seenMs<30*864e5);
+  const st=comps.map(x=>({x,u:devUpd(x)}));
+  const ok=st.filter(e=>e.u.s==='ok').length;
+  const ask=updUi.ask;
+  const modeHtml=`<label class="r"><input type="radio" name="um" ${updUi.mode==='start'?'checked':''} onchange="updUi.mode='start'"> beim nächsten Start</label><label class="r"><input type="radio" name="um" ${updUi.mode==='now'?'checked':''} onchange="updUi.mode='now'"> sofort (offene Apps laden neu)</label>`;
+  const askHtml=ask?`<div class="upd-box" id="upd-ask"><h4>${esc(relLabel(ask))} an alle Computer verteilen?</h4><div class="upd-row">${modeHtml}</div>
+     <p class="note">${ask.type==='full'?'Vollversion: Bei „beim nächsten Start“ wird sie beim nächsten Beenden der App installiert (Mac: ⌘Q). „Sofort“ startet offene Apps neu.':ask.type==='base'?'Alle Computer verwenden wieder die eingebaute Programmversion.':'App-Paket: Bei „sofort“ laden offene Apps innerhalb von etwa 1 Minute neu, ohne Datenverlust.'}${data.rollout&&ask.type!=='base'&&data.rollout.version&&vgt(data.rollout.version,ask.version)?' <b>Das ist eine ältere Version als die aktuell verteilte (Zurück).</b>':''}</p>
+     <div class="upd-row"><button class="btn" onclick="updUi.ask=null;render()">Abbrechen</button><button class="btn primary" onclick="distribute()" ${updUi.busy?'disabled':''}>${updUi.busy?'<span class="spin"></span> Verteile…':'Jetzt verteilen'}</button></div></div>`:'';
+  const meta=updUi.meta;
+  const upHtml=`<div class="upd-box"><h4>Neues App-Paket (.lsapp) – kleine Updates ohne GitHub</h4>
+     ${meta?`<p style="margin:0 0 8px"><b>App-Paket ${esc(meta.version)}</b> · ${(updUi.file.size/1048576).toFixed(1)} MB · braucht Programm ≥ ${esc(meta.minCore||'–')}${meta.notes?'<br><span class="note">'+esc(meta.notes)+'</span>':''}</p>
+       <div class="upd-row"><button class="btn" onclick="updUi.file=null;updUi.meta=null;render()">Abbrechen</button><button class="btn primary" onclick="uploadBundle()" ${updUi.busy?'disabled':''}>${updUi.busy?'<span class="spin"></span> Lädt hoch…':'Hochladen'}</button></div>`
+     :`<div class="upd-row"><input type="file" id="upd-file" accept=".lsapp" onchange="pickBundle(this.files[0])"><span class="note">Datei auf diese Fläche ziehen oder auswählen.</span></div>`}</div>`;
+  const fullHtml=`<div class="upd-box"><h4>Vollversion (GitHub-Release) – nur bei Änderungen am Programmkern</h4>
+     ${updUi.full?`<p style="margin:0 0 8px"><b>Vollversion ${esc(updUi.full.version)}</b> · Windows: ${updUi.full.win?'✓':'fehlt'} · Mac: ${updUi.full.mac?'✓':'fehlt'}</p><div class="upd-row"><button class="btn" onclick="updUi.full=null;render()">Abbrechen</button><button class="btn primary" onclick="saveFull()">Übernehmen</button></div>`
+     :`<div class="upd-row"><input type="text" id="upd-tag" placeholder="v1.9.0"><button class="btn" onclick="fetchFull()">Von GitHub holen</button><span class="note">Release vorher auf GitHub veröffentlichen.</span></div>`}</div>`;
+  const rels=[...data.releases,{type:'base',version:'',id:'base'}];
+  const listHtml=`<div class="tablewrap"><table><thead><tr><th>Version</th><th>Hochgeladen</th><th>Notiz</th><th></th></tr></thead><tbody>${rels.map(x=>{ const cur=r&&r.type===x.type&&(r.version||'')===(x.version||''); return `<tr><td><b>${esc(relLabel(x))}</b>${cur?' <span class="pill ok">verteilt</span>':''}</td><td class="t">${x.uploaded?dt(new Date(x.uploaded).toISOString()):'–'}</td><td>${esc(x.notes||'')}</td><td style="text-align:right">${cur?'':`<button class="linkbtn" onclick='askDist(${JSON.stringify(x).replace(/'/g,"&#39;")})'>${r&&r.version&&x.version&&vgt(r.version,x.version)?'Zurück auf diese…':'Verteilen…'}</button>`}</td></tr>`; }).join('')}</tbody></table></div>`;
+  return `<h3><span>Updates</span><span>${r?ok+' von '+comps.length+' Computern aktuell':''}</span></h3>
+  <div class="upd" id="upd-sec" ondragover="event.preventDefault()" ondrop="event.preventDefault();if(event.dataTransfer.files[0])pickBundle(event.dataTransfer.files[0])">
+    <div class="upd-now"><div style="flex:1;min-width:240px"><div class="note">Aktuell verteilt</div><div class="big">${r?esc(relLabel(r)):'Noch nichts verteilt'}</div>${r?`<div class="note">${dt(new Date(r.at).toISOString())} · ${r.mode==='now'?'sofort':'beim nächsten Start'}</div>`:''}</div>
+      <div class="wipe-dev" style="margin:0">${st.map(e=>`<span class="pill ${e.u.s}" title="${esc(e.u.t)}">${esc(e.x.name)}: ${esc(e.u.t)}</span>`).join('')||'<span class="note">Noch kein Computer verbunden.</span>'}</div></div>
+    ${updUi.msg?`<p class="note" style="color:var(--fg)">${esc(updUi.msg)}</p>`:''}
+    ${askHtml}${upHtml}${fullHtml}${listHtml}
+    <p class="note">iPhone-App und Monitor aktualisieren sich automatisch, sobald neue Dateien auf GitHub liegen.</p>
+  </div>`;
+}
+// asar-Archiv im Browser lesen (Paketinfo lsbundle.json)
+async function readAsarJson(file,name){
+  const head=new DataView(await file.slice(0,16).arrayBuffer());
+  const hsize=head.getUint32(4,true), jlen=head.getUint32(12,true);
+  const header=JSON.parse(new TextDecoder().decode(await file.slice(16,16+jlen).arrayBuffer()));
+  const e=header.files&&header.files[name]; if(!e) throw new Error('Kein App-Paket (lsbundle.json fehlt)');
+  const off=8+hsize+(+e.offset);
+  return JSON.parse(new TextDecoder().decode(await file.slice(off,off+e.size).arrayBuffer()));
+}
+async function pickBundle(f){
+  if(!f) return;
+  try{ const m=await readAsarJson(f,'lsbundle.json'); if(!/^\d+\.\d+\.\d+$/.test(m.version||'')) throw new Error('Paketversion fehlt'); updUi.file=f; updUi.meta=m; updUi.msg=''; }
+  catch(e){ updUi.file=null; updUi.meta=null; alertMsg('Datei ist kein gültiges App-Paket: '+e.message); }
+  render();
+}
+async function saveRelease(rel){
+  await LeadSync.api('ls_items?on_conflict=user_id,kind,id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify([{kind:'release',id:rel.type+'-'+rel.version,data:rel,updated_at:Date.now(),deleted:false,device:'monitor'}])});
+}
+async function uploadBundle(){
+  const f=updUi.file,m=updUi.meta; if(!f||!m||updUi.busy) return; updUi.busy=true; render();
+  try{
+    const buf=await f.arrayBuffer();
+    const sha=[...new Uint8Array(await crypto.subtle.digest('SHA-256',buf))].map(b=>b.toString(16).padStart(2,'0')).join('');
+    const p=LeadSync.info.uid+'/app-'+m.version+'.lsapp';
+    const res=await LeadSync.authFetch('storage/v1/object/ls-updates/'+p,{method:'POST',headers:{'x-upsert':'true','Content-Type':'application/octet-stream'},body:buf});
+    if(!res.ok){ const t=await res.text().catch(()=>''); throw new Error(res.status+(t?' '+t.slice(0,120):'')); }
+    const rel={type:'app',version:m.version,minCore:m.minCore||null,notes:m.notes||'',path:p,sha256:sha,size:f.size,uploaded:Date.now()};
+    await saveRelease(rel);
+    updUi.file=null; updUi.meta=null; updUi.busy=false; updUi.ask=rel; updUi.mode='start'; updUi.msg='App-Paket '+m.version+' ist hochgeladen.';
+  }catch(e){ updUi.busy=false; alertMsg(/bucket|Bucket|404/.test(e.message)?'Speicher fehlt – bitte die SQL-Datei in Supabase erneut ausführen. ('+e.message+')':'Hochladen fehlgeschlagen: '+e.message); }
+  load();
+}
+async function fetchFull(){
+  let tag=($('#upd-tag').value||'').trim(); if(!tag) return; if(!/^v/.test(tag)) tag='v'+tag;
+  try{
+    const r=await fetch(GH_API()+encodeURIComponent(tag)); if(!r.ok) throw new Error(r.status===404?'Release '+tag+' nicht gefunden':'GitHub '+r.status);
+    const j=await r.json(); const as=j.assets||[];
+    const pick=re=>{ const a=as.find(x=>re.test(x.name)); return a?{url:a.browser_download_url,size:a.size,sha256:(a.digest||'').replace(/^sha256:/,'')||undefined}:null; };
+    updUi.full={type:'full',version:tag.replace(/^v/,''),win:pick(/-win\.exe$/i),mac:pick(/-mac\.zip$/i),notes:(j.name||''),uploaded:Date.now()};
+    if(!updUi.full.win&&!updUi.full.mac) throw new Error('Im Release fehlen die Dateien …-win.exe / …-mac.zip');
+  }catch(e){ updUi.full=null; alertMsg(e.message); }
+  render();
+}
+async function saveFull(){ const rel=updUi.full; if(!rel) return; try{ await saveRelease(rel); updUi.full=null; updUi.ask=rel; updUi.mode='start'; }catch(e){ alertMsg('Speichern fehlgeschlagen: '+e.message); } load(); }
+function askDist(rel){ updUi.ask=rel; updUi.mode='start'; render(); const b=$('#upd-ask'); if(b) b.scrollIntoView({block:'center'}); }
+async function distribute(){
+  const rel=updUi.ask; if(!rel||updUi.busy) return; updUi.busy=true; render();
+  try{
+    const at=Date.now(), mode=updUi.mode==='now'?'now':'start';
+    await LeadSync.api('ls_items?on_conflict=user_id,kind,id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify([{kind:'rollout',id:'current',data:{...rel,mode,at},updated_at:at,deleted:false,device:'monitor'}])});
+    updUi.msg=relLabel(rel)+' wird verteilt ('+(mode==='now'?'sofort':'beim nächsten Start')+').'; updUi.ask=null;
+  }catch(e){ alertMsg('Verteilen fehlgeschlagen: '+e.message); }
+  updUi.busy=false; load();
+}
 function loginHtml(){
   return `<div class="login"><div class="logo"><img src="monitor-icon.png" alt=""></div><h1>Lead System Monitor</h1><div class="sub">Zeigt alle verbundenen Geräte und ob sie synchron sind.</div>
     <label for="m">E-Mail (Sync-Zugang)</label><input id="m" type="email" autocomplete="username">
@@ -291,7 +399,7 @@ async function doLogin(){ const m=$('#m').value.trim(), p=$('#p').value; if(!m||
 
 render();
 if(LeadSync.info.loggedIn) load();
-timer=setInterval(()=>{ if(LeadSync.info.loggedIn&&!editing&&!restoreAsk&&!wipe&&document.visibilityState!=='hidden') load(); },10000);
+timer=setInterval(()=>{ if(LeadSync.info.loggedIn&&!editing&&!restoreAsk&&!wipe&&!updUi.ask&&!updUi.file&&!updUi.full&&!updUi.busy&&document.visibilityState!=='hidden') load(); },10000);
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&LeadSync.info.loggedIn) load(); });
 </script>
 </body>
