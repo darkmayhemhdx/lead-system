@@ -183,9 +183,9 @@ function analyse(rows){
   const changes=rows.filter(r=>r.kind==='lead'||r.kind==='task'||r.kind==='meta').sort((a,b)=>a.srv<b.srv?1:-1);
   const lastChange=changes[0]?changes[0].srv:null;
   const devRows=rows.filter(r=>r.kind==='device');
-  const names={}; devRows.forEach(d=>names[d.id]=(LBL()[d.id]||d.data.name||'Gerät'));
+  const names={}; devRows.forEach(d=>{ const n=(LBL()[d.id]||d.data.name||'Gerät'); names[d.id]=n; (d.data.aliases||[]).forEach(a=>{ if(!names[a]) names[a]=n; }); });
   const now=Date.now();
-  const devs=devRows.map(r=>{
+  const allDevs=devRows.map(r=>{
     const d=r.data||{}, seenMs=now-new Date(d.seen||r.srv), live=seenMs<90e3;
     let st,lab,why;
     if(d.state==='err'&&seenMs<5*60e3){ st='bad'; lab='Fehler'; why=d.msg||'Abgleich fehlgeschlagen'; }
@@ -195,6 +195,11 @@ function analyse(rows){
     else { st='bad'; lab='Abweichung'; why=`Gerät: ${d.leads??'?'} Leads · Cloud: ${leads} Leads – App öffnen und „Jetzt abgleichen“`; }
     return {id:r.id,d,st,lab,why,live,seenMs,name:names[r.id]};
   }).sort((a,b)=>a.seenMs-b.seenMs);
+  // Doppelte Einträge desselben Geräts (gleicher Name + System) zu einer Karte zusammenfassen – die jüngste Meldung zählt
+  const byKey=new Map(), devsM=[];
+  allDevs.forEach(x=>{ const k=String(x.d.name||x.id).trim().toLowerCase()+'|'+(x.d.platform||''); const p=byKey.get(k); if(p){ p.dups.push(x); } else { x.dups=[]; byKey.set(k,x); devsM.push(x); } });
+  devsM.forEach(x=>x.dups.forEach(o=>{ if(!LBL()[x.id]&&LBL()[o.id]) x.name=LBL()[o.id]; }));
+  const devs=devsM;
   const rollout=(rows.find(r=>r.kind==='rollout'&&r.id==='current'&&!r.deleted)||{}).data||null;
   const releases=rows.filter(r=>r.kind==='release'&&!r.deleted&&r.data).map(r=>r.data).sort((a,b)=>(b.uploaded||0)-(a.uploaded||0));
   return {fp,leads,tasks,lastChange,devs,names,changes:changes.slice(0,30),rows,rollout,releases};
@@ -238,9 +243,11 @@ function devicesHtml(){
         <dt>Daten auf dem Gerät</dt><dd>${d.leads??'–'} Leads · ${d.tasks??'–'} Aufgaben</dd>
         ${d.stats?`<dt>Letzte Runde</dt><dd>${d.stats.got} empfangen · ${d.stats.sent} gesendet</dd>`:''}
         <dt>Hinweis</dt><dd>${esc(x.why)}</dd></dl>
-      <div class="dev-f"><button class="linkbtn" onclick="editing='${x.id}';render()">Umbenennen</button>${x.seenMs>7*864e5?`<button class="linkbtn del" onclick="removeDev('${x.id}')">Gerät entfernen</button>`:`<span class="hint">${esc(x.id)}</span>`}</div></div>`; }).join('')||'<p class="hint">Noch keine Geräte. Sobald sich eine App unter „Synchronisation“ anmeldet, erscheint sie hier.</p>'}</div>`;
+      <div class="dev-f"><button class="linkbtn" onclick="editing='${x.id}';render()">Umbenennen</button>${x.seenMs>3600e3?`<button class="linkbtn del" onclick="removeDev('${x.id}')">Gerät entfernen</button>`:`<span class="hint">${esc(x.id)}</span>`}</div>
+      ${x.dups&&x.dups.length?`<div class="dev-f" style="border-top:0;padding-top:0"><span class="hint">${x.dups.length>1?x.dups.length+' ältere Einträge':'1 älterer Eintrag'} dieses Geräts zusammengefasst</span><button class="linkbtn del" onclick="removeDevs(${esc(JSON.stringify(x.dups.map(o=>o.id)))})">Alte Einträge löschen</button></div>`:''}</div>`; }).join('')||'<p class="hint">Noch keine Geräte. Sobald sich eine App unter „Synchronisation“ anmeldet, erscheint sie hier.</p>'}</div>`;
 }
 function saveLabel(id,v){ const L=LBL(); v=String(v||'').trim(); if(v) L[id]=v; else delete L[id]; try{ localStorage.setItem('mon:labels',JSON.stringify(L)); }catch(e){} editing=null; if(data) data=analyse(data.rows); render(); }
+async function removeDevs(ids){ for(const id of ids){ try{ await LeadSync.api('ls_items?kind=eq.device&id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:{Prefer:'return=minimal'}}); }catch(e){} } load(); }
 async function removeDev(id){ try{ await LeadSync.api('ls_items?kind=eq.device&id=eq.'+encodeURIComponent(id),{method:'DELETE',headers:{Prefer:'return=minimal'}}); }catch(e){} load(); }
 function backupsHtml(){
   if(backups==null) return '';

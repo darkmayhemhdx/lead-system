@@ -211,8 +211,8 @@
     let info = {}; try { info = (S.host.deviceInfo && await S.host.deviceInfo()) || {}; } catch (e) {}
     const f = localFingerprint();
     const data = { name: info.name || 'Gerät', platform: info.platform || '', version: info.version || '', user: info.user || '',
-      lastSync: S.lastSync, state: S.state, msg: S.msg, ...(info.extra || {}), fp: f.fp, leads: f.leads, tasks: f.tasks, stats: S.stats || null, seen: new Date().toISOString() };
-    await api('ls_items?on_conflict=user_id,kind,id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ kind: 'device', id: DEV, data, updated_at: Date.now(), deleted: false, device: DEV }]) });
+      lastSync: S.lastSync, state: S.state, msg: S.msg, ...(info.extra || {}), aliases: [DEV], fp: f.fp, leads: f.leads, tasks: f.tasks, stats: S.stats || null, seen: new Date().toISOString() };
+    await api('ls_items?on_conflict=user_id,kind,id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ kind: 'device', id: info.stableId || DEV, data, updated_at: Date.now(), deleted: false, device: DEV }]) });
   }
   function soon(ms) { clearTimeout(S.timer); S.timer = setTimeout(sync, ms == null ? 2500 : ms); }
 
